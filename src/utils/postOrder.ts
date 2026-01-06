@@ -30,6 +30,7 @@ const postOrder = async (
   my_balance: number,
   user_balance: number
 ) => {
+    const ratioAmp = 1;
   const key = tradeKey(trade);
   const alreadyTried = retries.get(key) ?? 0;
   if (alreadyTried >= RETRY_LIMIT) {
@@ -103,14 +104,17 @@ const postOrder = async (
     return;
   }
 
+
+
   // Buy strategy
   if (condition === 'buy') {
     console.log('Buy Strategy...');
 
-    const ratio = my_balance / (user_balance + trade.usdcSize);
+    const ratio = my_balance * ratioAmp / (user_balance + trade.usdcSize);
     console.log('ratio', ratio);
 
     let remaining = trade.usdcSize * ratio;
+    remaining = Math.min(remaining, my_balance);
     let retry = 0;
 
     while (remaining > 0 && retry < RETRY_LIMIT) {

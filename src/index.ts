@@ -9,7 +9,7 @@ const USER_ADDRESS = ENV.USER_ADDRESS;
 const PROXY_WALLET = ENV.PROXY_WALLET;
 
 export const main = async () => {
-    await connectDB();
+    // await connectDB();
     console.log(`Target User Wallet addresss is: ${USER_ADDRESS}`);
     console.log(`Target User Wallet balance is: ${await getMyBalance(PROXY_WALLET)}` )
     console.log(`My Wallet addresss is: ${PROXY_WALLET}`);
