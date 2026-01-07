@@ -27,6 +27,24 @@ const markDone = (trade: UserActivityInterface) => {
   retries.set(key, RETRY_LIMIT);
 };
 
+const floorTo = (value: number, decimals: number) => {
+  const m = 10 ** decimals;
+  return Math.floor(value * m) / m;
+};
+
+const normalizeBuy = (usdc: number, price: number) => {
+  // makerAmount (shares) ≤ 4 decimals
+  const shares = floorTo(usdc / price, 4);
+
+  // takerAmount (USDC) ≤ 2 decimals and consistent with shares
+  const usdcFixed = floorTo(shares * price, 2);
+
+  return {
+    usdc: usdcFixed,
+    price: floorTo(price, 4),
+    shares,
+  };
+};
 
 const postOrder = async (
   clobClient: ClobClient,
@@ -150,44 +168,38 @@ const postOrder = async (
         const askSize = parseFloat(minPriceAsk.size);
         const askPrice = parseFloat(minPriceAsk.price);
 
-        // Cap by available liquidity at best ask
+        // Cap by liquidity
         const maxSpendAtBestAsk = askSize * askPrice;
-        const amount = remaining <= maxSpendAtBestAsk ? remaining : maxSpendAtBestAsk;
+        const rawUsdc = Math.min(remaining, maxSpendAtBestAsk);
 
-        const roundTo = (value: number, decimals: number) =>
-          Math.floor(value * 10 ** decimals) / 10 ** decimals;
+        // Normalize amounts (THIS IS THE FIX)
+        const { usdc, price } = normalizeBuy(rawUsdc, askPrice);
 
-        // BUY rules
-        const roundedAmountUSDC = roundTo(amount, 2);   // takerAmount
-        const roundedPrice      = roundTo(askPrice, 4); // price precision safety
+        if (usdc < MIN_BUY_NOTIONAL) {
+          console.log(`Skipping BUY: ${usdc} < $1 minimum after rounding`);
+          markDone(trade);
+          break;
+        }
 
         const order_args = {
           side: Side.BUY,
           tokenID: trade.asset,
-          amount: roundedAmountUSDC,
-          price: roundedPrice,
+          amount: usdc,       // USDC, 2 decimals, valid
+          price,              // price, 4 decimals
           feeRateBps: TAKER_FEE_BPS,
         };
 
         console.log('Order args:', order_args);
 
-        if (remaining < MIN_BUY_NOTIONAL) {
-          console.log(`Skipping BUY: remaining ${remaining} < $1 minimum`);
-          markDone(trade);
-          break;
-        }
-
-        const signedOrder = await clobClient.createMarketOrder(order_args);
+        const signedOrder = await clobClient.createMarketOrder(order_args as any);
         const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
         if (resp.success === true) {
           retry = 0;
-          console.log('Successfully posted order:', resp);
-          remaining -= amount;
+          remaining -= usdc; // subtract ACTUAL USDC spent
         } else {
           retry += 1;
           markTried(trade);
-          console.log('Error posting order: retrying...', resp);
         }
       } catch (e) {
         retry += 1;
