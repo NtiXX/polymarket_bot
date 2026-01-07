@@ -170,13 +170,10 @@ const postOrder = async (
 
         // Cap by liquidity
         const maxSpendAtBestAsk = askSize * askPrice;
-        const rawUsdc = Math.min(remaining, maxSpendAtBestAsk);
+        const amount = remaining <= maxSpendAtBestAsk ? remaining : maxSpendAtBestAsk;
 
-        // Normalize amounts (THIS IS THE FIX)
-        const { usdc, price } = normalizeBuy(rawUsdc, askPrice);
-
-        if (usdc < MIN_BUY_NOTIONAL) {
-          console.log(`Skipping BUY: ${usdc} < $1 minimum after rounding`);
+        if (amount < MIN_BUY_NOTIONAL) {
+          console.log(`Skipping BUY: $${amount} < $1 minimum after rounding`);
           markDone(trade);
           break;
         }
@@ -184,8 +181,8 @@ const postOrder = async (
         const order_args = {
           side: Side.BUY,
           tokenID: trade.asset,
-          amount: usdc,       // USDC, 2 decimals, valid
-          price,              // price, 4 decimals
+          amount: amount,       // USDC, 2 decimals, valid
+          price: askPrice,              // price, 4 decimals
           feeRateBps: TAKER_FEE_BPS,
         };
 
@@ -196,7 +193,7 @@ const postOrder = async (
 
         if (resp.success === true) {
           retry = 0;
-          remaining -= usdc; // subtract ACTUAL USDC spent
+          remaining -= amount; // subtract ACTUAL USDC spent
         } else {
           retry += 1;
           markTried(trade);
