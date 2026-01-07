@@ -175,7 +175,9 @@ const postOrder = async (
         const amount = remaining <= maxSpendAtBestAsk ? remaining : maxSpendAtBestAsk;
 
         if (amount < MIN_BUY_NOTIONAL) {
-          console.log(`Skipping BUY: $${amount} < $1 minimum after rounding`);
+          console.log("============== Skipping BUY ===============")
+          console.log(`$${amount} < $1 minimum after rounding`);
+          console.log("===========================================")
           markDone(trade);
           break;
         }
