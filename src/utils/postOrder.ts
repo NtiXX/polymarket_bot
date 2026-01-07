@@ -4,7 +4,7 @@ import { ENV } from '../config/env';
 
 const RETRY_LIMIT = ENV.RETRY_LIMIT;
 
-const TAKER_FEE_BPS = 1000;
+const TAKER_FEE_BPS = 0;
 
 const MIN_BUY_NOTIONAL = 1; // $1
 
