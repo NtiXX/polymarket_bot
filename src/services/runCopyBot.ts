@@ -78,8 +78,8 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
         `https://data-api.polymarket.com/positions?user=${USER_ADDRESS}`
       );
 
-      const my_position = my_positions.find((p) => p.conditionId === trade.conditionId);
-      const user_position = user_positions.find((p) => p.conditionId === trade.conditionId);
+      const my_position = my_positions.find((p) => p.asset === trade.asset);
+      const user_position = user_positions.find((p) => p.asset === trade.asset);
 
       const my_balance = await getMyBalance(PROXY_WALLET);
       const user_balance = await getMyBalance(USER_ADDRESS);
@@ -88,11 +88,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
       console.log("User current balance:", user_balance);
 
       if (trade.side === "BUY") {
-        if (user_position && my_position && my_position.asset !== trade.asset) {
-          await postOrder(clobClient, "merge", my_position, user_position, trade, my_balance, user_balance);
-        } else {
-          await postOrder(clobClient, "buy", my_position, user_position, trade, my_balance, user_balance);
-        }
+        await postOrder(clobClient, "buy", my_position, user_position, trade, my_balance, user_balance);
       } else if (trade.side === "SELL") {
         await postOrder(clobClient, "sell", my_position, user_position, trade, my_balance, user_balance);
       } else {
