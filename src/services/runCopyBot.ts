@@ -169,7 +169,7 @@ const runCopyBot = async (clobClient: ClobClient) => {
       console.error("runCopyBot loop error:", err);
     }
 
-    await sleep(FETCH_INTERVAL * 500);
+    await sleep(FETCH_INTERVAL * 1000);
   }
 };
 
