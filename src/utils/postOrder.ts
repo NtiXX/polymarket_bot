@@ -8,7 +8,7 @@ const TAKER_FEE_BPS = 0;
 
 const MIN_BUY_NOTIONAL = 1; // $1
 
-const RATIO_AMP = 50;
+const RATIO_AMP = 40;
 
 // In-memory retry tracking (no DB)
 const retries = new Map<string, number>();
