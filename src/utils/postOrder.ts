@@ -90,7 +90,7 @@ const postOrder = async (
 
         console.log('Min price ask:', minPriceAsk);
 
-        if (parseFloat(minPriceAsk.price) - 0.1 > trade.price) {
+        if (parseFloat(minPriceAsk.price) - 0.5 > trade.price) {
           console.log('Too big different price - do not copy');
           markDone(trade);
           break;
@@ -114,6 +114,7 @@ const postOrder = async (
         const order_args = {
           side: Side.BUY,
           tokenID: trade.asset,
+          title: trade.title,
           amount: amount,       // USDC, 2 decimals, valid
           price: askPrice,              // price, 4 decimals
           feeRateBps: TAKER_FEE_BPS,
@@ -188,6 +189,7 @@ const postOrder = async (
         const order_args = {
           side: Side.SELL,
           tokenID: trade.asset,
+          title: trade.title,
           amount,
           price: bidPrice,
           feeRateBps: TAKER_FEE_BPS,
