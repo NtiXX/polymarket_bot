@@ -4,6 +4,8 @@ import { ENV } from '../config/env';
 
 const RETRY_LIMIT = ENV.RETRY_LIMIT;
 
+const TAKER_FEE_BPS = 1000;
+
 // In-memory retry tracking (no DB)
 const retries = new Map<string, number>();
 
@@ -20,6 +22,7 @@ const markDone = (trade: UserActivityInterface) => {
   const key = tradeKey(trade);
   retries.set(key, RETRY_LIMIT);
 };
+
 
 const postOrder = async (
   clobClient: ClobClient,
@@ -77,6 +80,7 @@ const postOrder = async (
           tokenID: my_position.asset,
           amount,
           price,
+          feeRateBps: TAKER_FEE_BPS,
         };
 
         console.log('Order args:', order_args);
@@ -151,6 +155,7 @@ const postOrder = async (
           tokenID: trade.asset,
           amount,
           price: askPrice,
+          feeRateBps: TAKER_FEE_BPS,
         };
 
         console.log('Order args:', order_args);
@@ -224,6 +229,7 @@ const postOrder = async (
           tokenID: trade.asset,
           amount,
           price: bidPrice,
+          feeRateBps: TAKER_FEE_BPS,
         };
 
         console.log('Order args:', order_args);

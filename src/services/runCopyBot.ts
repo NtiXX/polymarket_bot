@@ -1,4 +1,3 @@
-// src/bot/runCopyBot.ts
 import moment from "moment";
 import { ClobClient } from "@polymarket/clob-client";
 
@@ -10,11 +9,13 @@ import getMyBalance from "../utils/getMyBalance";
 import postOrder from "../utils/postOrder";
 import { TradeAggregator, AggregatedTrade } from "../utils/tradeAggregator";
 
-const USER_ADDRESS = ENV.USER_ADDRESS;
-const PROXY_WALLET = ENV.PROXY_WALLET;
+const USER_ADDRESS = ENV.USER_ADDRESS; // target trader
+const PROXY_WALLET = ENV.PROXY_WALLET; // your wallet
 const FETCH_INTERVAL = ENV.FETCH_INTERVAL; // seconds
 const TOO_OLD_TIMESTAMP = ENV.TOO_OLD_TIMESTAMP; // hours
 const RETRY_LIMIT = ENV.RETRY_LIMIT;
+
+const BATCH_WINDOW_MS = 900; // collect “5-6 events per trade” into 1 order
 
 if (!USER_ADDRESS) throw new Error("USER_ADDRESS is not defined");
 if (!PROXY_WALLET) throw new Error("PROXY_WALLET is not defined");
@@ -25,14 +26,9 @@ const activityKey = (a: UserActivityInterface): TradeKey =>
   a.transactionHash ??
   `${a.timestamp}-${a.conditionId}-${a.side}-${a.size}-${a.price}-${a.asset}`;
 
-/**
- * In-memory state
- */
 const seenThisRun = new Set<TradeKey>();
 const retries = new Map<TradeKey, number>();
 let primed = false;
-
-const aggregator = new TradeAggregator();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,13 +45,13 @@ const fetchTargetTrades = async (): Promise<UserActivityInterface[]> => {
     .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
 };
 
-const aggregatedKey = (t: AggregatedTrade): TradeKey =>
-  // stable per “asset+side+conditionId” aggregated unit
-  `${t.conditionId}|${t.asset}|${t.side}|${t.firstTimestamp}|${t.lastTimestamp}|${t.batchCount}`;
-
 const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
   for (const trade of trades) {
-    const key = aggregatedKey(trade);
+    // One aggregated trade is a “synthetic” trade. Use a stable key.
+    const key =
+      trade.transactionHash ??
+      `${trade.firstTimestamp}-${trade.lastTimestamp}-${trade.side}-${trade.asset}`;
+
     const tries = retries.get(key) ?? 0;
     if (tries >= RETRY_LIMIT) continue;
 
@@ -89,36 +85,12 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
 
       if (trade.side === "BUY") {
         if (user_position && my_position && my_position.asset !== trade.asset) {
-          await postOrder(
-            clobClient,
-            "merge",
-            my_position,
-            user_position,
-            trade,
-            my_balance,
-            user_balance
-          );
+          await postOrder(clobClient, "merge", my_position, user_position, trade, my_balance, user_balance);
         } else {
-          await postOrder(
-            clobClient,
-            "buy",
-            my_position,
-            user_position,
-            trade,
-            my_balance,
-            user_balance
-          );
+          await postOrder(clobClient, "buy", my_position, user_position, trade, my_balance, user_balance);
         }
       } else if (trade.side === "SELL") {
-        await postOrder(
-          clobClient,
-          "sell",
-          my_position,
-          user_position,
-          trade,
-          my_balance,
-          user_balance
-        );
+        await postOrder(clobClient, "sell", my_position, user_position, trade, my_balance, user_balance);
       } else {
         console.log("Not supported trade side:", trade.side);
       }
@@ -126,7 +98,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
       retries.set(key, RETRY_LIMIT);
     } catch (err) {
       retries.set(key, tries + 1);
-      console.error(`Failed copying trade (attempt ${tries + 1}/${RETRY_LIMIT})`, err);
+      console.error(`Failed copying aggregated trade (attempt ${tries + 1}/${RETRY_LIMIT})`, err);
     }
   }
 };
@@ -138,47 +110,54 @@ const runCopyBot = async (clobClient: ClobClient) => {
     try {
       const trades = await fetchTargetTrades();
 
-      // prime: do not execute history
+      // Prime: mark current history as seen, do not execute.
       if (!primed) {
         for (const t of trades) seenThisRun.add(activityKey(t));
         primed = true;
-        console.log(
-          `Primed with ${trades.length} recent trades. Will execute only NEW trades from now on.`
-        );
+        console.log(`Primed with ${trades.length} recent trades. Will execute only NEW trades from now on.`);
         spinner.start("Waiting for new trades");
         await sleep(FETCH_INTERVAL * 1000);
         continue;
       }
 
-      // ONLY NEW raw events this poll
-      const newRawTrades = trades.filter((t) => {
+      // Only trades not seen since bot start
+      const newTrades = trades.filter((t) => {
         const k = activityKey(t);
         if (seenThisRun.has(k)) return false;
         seenThisRun.add(k);
         return true;
       });
 
-      if (newRawTrades.length === 0) {
+      if (newTrades.length === 0) {
         spinner.start("Waiting for new trades");
         await sleep(FETCH_INTERVAL * 1000);
         continue;
       }
 
       spinner.stop();
-      console.log(`💥 ${newRawTrades.length} new raw trade event(s) detected`);
+      console.log(`💥 ${newTrades.length} new trade event(s) detected. Aggregating...`);
 
-      /**
-       * No time window / no extra fetch.
-       * We aggregate ALL new events seen in this poll by (conditionId|asset|side).
-       * That means: “collect all trades that are on the same asset” for this poll.
-       */
-      for (const t of newRawTrades) aggregator.add(t);
+      // Aggregate everything that arrives within the short batch window
+      const agg = new TradeAggregator();
+      for (const t of newTrades) agg.add(t);
 
-      const aggregated = aggregator.flush();
+      const t0 = Date.now();
+      while (Date.now() - t0 < BATCH_WINDOW_MS) {
+        await sleep(150);
 
-      console.log(
-        `✅ Aggregated into ${aggregated.length} actionable trade(s) (from ${newRawTrades.length} raw events)`
-      );
+        const more = await fetchTargetTrades();
+        const moreNew = more.filter((t) => {
+          const k = activityKey(t);
+          if (seenThisRun.has(k)) return false;
+          seenThisRun.add(k);
+          return true;
+        });
+
+        for (const t of moreNew) agg.add(t);
+      }
+
+      const aggregated = agg.flush();
+      console.log(`✅ Aggregated into ${aggregated.length} trade(s). Executing...`);
 
       await doTrading(clobClient, aggregated);
     } catch (err) {
