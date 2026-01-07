@@ -56,6 +56,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
     if (tries >= RETRY_LIMIT) continue;
 
     try {
+      console.log("============== FETCHED ===============")
       console.log(`Aggregated trade x${trade.batchCount}:`, {
         side: trade.side,
         asset: trade.asset,
@@ -67,6 +68,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
         firstTimestamp: trade.firstTimestamp,
         lastTimestamp: trade.lastTimestamp,
       });
+      console.log("======================================")
 
       const my_positions: UserPositionInterface[] = await fetchData(
         `https://data-api.polymarket.com/positions?user=${PROXY_WALLET}`

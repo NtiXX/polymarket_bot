@@ -105,7 +105,9 @@ const postOrder = async (
           feeRateBps: TAKER_FEE_BPS,
         };
 
+        console.log("============== MERGE TRADE ===============")
         console.log('Order args:', order_args);
+        console.log("==========================================")
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
         const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
@@ -186,7 +188,9 @@ const postOrder = async (
           feeRateBps: TAKER_FEE_BPS,
         };
 
+        console.log("============== BUY TRADE ===============")
         console.log('Order args:', order_args);
+        console.log("========================================")
 
         const signedOrder = await clobClient.createMarketOrder(order_args as any);
         const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
@@ -258,7 +262,10 @@ const postOrder = async (
           feeRateBps: TAKER_FEE_BPS,
         };
 
+        console.log("============== SELL TRADE ===============")
         console.log('Order args:', order_args);
+        console.log("========================================")
+
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
         const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
