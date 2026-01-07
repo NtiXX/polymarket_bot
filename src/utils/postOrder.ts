@@ -154,12 +154,18 @@ const postOrder = async (
         const maxSpendAtBestAsk = askSize * askPrice;
         const amount = remaining <= maxSpendAtBestAsk ? remaining : maxSpendAtBestAsk;
 
+        const roundTo = (value: number, decimals: number) =>
+          Math.floor(value * 10 ** decimals) / 10 ** decimals;
+
+        // BUY rules
+        const roundedAmountUSDC = roundTo(amount, 2);   // takerAmount
+        const roundedPrice      = roundTo(askPrice, 4); // price precision safety
 
         const order_args = {
           side: Side.BUY,
           tokenID: trade.asset,
-          amount,
-          price: askPrice,
+          amount: roundedAmountUSDC,
+          price: roundedPrice,
           feeRateBps: TAKER_FEE_BPS,
         };
 
