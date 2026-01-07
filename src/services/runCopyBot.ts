@@ -62,6 +62,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
         conditionId: trade.conditionId,
         usdcSize: trade.usdcSize,
         size: trade.size,
+        outcome: trade.outcome,
         avgPrice: trade.price,
         firstTimestamp: trade.firstTimestamp,
         lastTimestamp: trade.lastTimestamp,
@@ -165,7 +166,7 @@ const runCopyBot = async (clobClient: ClobClient) => {
       console.error("runCopyBot loop error:", err);
     }
 
-    await sleep(FETCH_INTERVAL * 1000);
+    await sleep(FETCH_INTERVAL * 500);
   }
 };
 
