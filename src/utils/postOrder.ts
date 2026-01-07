@@ -33,7 +33,7 @@ const postOrder = async (
   my_balance: number,
   user_balance: number
 ) => {
-    const ratioAmp = 1;
+    const ratioAmp = 30;
   const key = tradeKey(trade);
   const alreadyTried = retries.get(key) ?? 0;
   if (alreadyTried >= RETRY_LIMIT) {
