@@ -4,7 +4,8 @@ import { ENV } from '../config/env';
 
 const RETRY_LIMIT = ENV.RETRY_LIMIT;
 
-const TAKER_FEE_BPS = 0;
+const FEE_15M_BPS = 1000;
+const FEE_DEFAULT_BPS = 0;
 
 const MIN_BUY_NOTIONAL = 1; // $1
 
@@ -27,23 +28,38 @@ const markDone = (trade: UserActivityInterface) => {
   retries.set(key, RETRY_LIMIT);
 };
 
-const floorTo = (value: number, decimals: number) => {
-  const m = 10 ** decimals;
-  return Math.floor(value * m) / m;
-};
+const feeBpsFromTitle = (title?: string): number => {
+  if (!title) return FEE_DEFAULT_BPS;
 
-const normalizeBuy = (usdc: number, price: number) => {
-  // makerAmount (shares) ≤ 4 decimals
-  const shares = floorTo(usdc / price, 4);
+  const m = title.match(
+    /(\d{1,2}:\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}:\d{2})\s*(AM|PM)/i
+  );
+  if (!m) return FEE_DEFAULT_BPS;
 
-  // takerAmount (USDC) ≤ 2 decimals and consistent with shares
-  const usdcFixed = floorTo(shares * price, 2);
+  const start = m[1] + m[2].toUpperCase(); // e.g. 10:00PM
+  const end = m[3] + m[4].toUpperCase();   // e.g. 10:15PM
 
-  return {
-    usdc: usdcFixed,
-    price: floorTo(price, 4),
-    shares,
+  const toMinutes = (t: string) => {
+    // t like "10:00PM"
+    const mt = t.match(/(\d{1,2}):(\d{2})(AM|PM)/i);
+    if (!mt) return null;
+    let h = parseInt(mt[1], 10);
+    const mm = parseInt(mt[2], 10);
+    const ap = mt[3].toUpperCase();
+
+    if (h === 12) h = 0;
+    if (ap === "PM") h += 12;
+    return h * 60 + mm;
   };
+
+  const s = toMinutes(start);
+  const e = toMinutes(end);
+  if (s == null || e == null) return FEE_DEFAULT_BPS;
+
+  // handle potential day wrap (rare, but safe)
+  const diff = e >= s ? e - s : e + 24 * 60 - s;
+
+  return diff === 15 ? FEE_15M_BPS : FEE_DEFAULT_BPS;
 };
 
 const postOrder = async (
@@ -111,13 +127,15 @@ const postOrder = async (
           break;
         }
 
+        const feeRateBps = feeBpsFromTitle(trade.title);
+
         const order_args = {
           side: Side.BUY,
           tokenID: trade.asset,
           title: trade.title,
           amount: amount,       // USDC, 2 decimals, valid
           price: askPrice,              // price, 4 decimals
-          feeRateBps: TAKER_FEE_BPS,
+          feeRateBps: feeRateBps,
         };
 
         console.log("============== BUY TRADE ===============")
@@ -186,13 +204,15 @@ const postOrder = async (
 
         const amount = remaining <= bidSize ? remaining : bidSize;
 
+        const feeRateBps = feeBpsFromTitle(trade.title);
+
         const order_args = {
           side: Side.SELL,
           tokenID: trade.asset,
           title: trade.title,
           amount,
           price: bidPrice,
-          feeRateBps: TAKER_FEE_BPS,
+          feeRateBps: feeRateBps,
         };
 
         console.log("============== SELL TRADE ===============")
