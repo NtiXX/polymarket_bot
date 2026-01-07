@@ -90,7 +90,7 @@ const postOrder = async (
 
         console.log('Min price ask:', minPriceAsk);
 
-        if (parseFloat(minPriceAsk.price) - 0.5 > trade.price) {
+        if (parseFloat(minPriceAsk.price) - 0.06 > trade.price) {
           console.log('Too big different price - do not copy');
           markDone(trade);
           break;
