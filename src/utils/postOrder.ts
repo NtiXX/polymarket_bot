@@ -201,7 +201,7 @@ const postOrder = async (
 
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
-        const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
+        const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
 
         if (resp.success === true) {
           retry = 0;
