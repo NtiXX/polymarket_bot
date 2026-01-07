@@ -8,7 +8,7 @@ const TAKER_FEE_BPS = 1000;
 
 const MIN_BUY_NOTIONAL = 1; // $1
 
-const RATIO_AMP = 50;
+const RATIO_AMP = 40;
 
 // In-memory retry tracking (no DB)
 const retries = new Map<string, number>();
@@ -90,7 +90,7 @@ const postOrder = async (
         console.log('Order args:', order_args);
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
-        const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+        const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
         if (resp.success === true) {
           retry = 0;
@@ -172,7 +172,7 @@ const postOrder = async (
         }
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
-        const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+        const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
         if (resp.success === true) {
           retry = 0;
@@ -246,7 +246,7 @@ const postOrder = async (
         console.log('Order args:', order_args);
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
-        const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
+        const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
         if (resp.success === true) {
           retry = 0;
