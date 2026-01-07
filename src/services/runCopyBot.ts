@@ -60,6 +60,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
       console.log(`Aggregated trade x${trade.batchCount}:`, {
         side: trade.side,
         asset: trade.asset,
+        title: trade.title,
         conditionId: trade.conditionId,
         usdcSize: trade.usdcSize,
         size: trade.size,

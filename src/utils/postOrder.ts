@@ -63,74 +63,74 @@ const postOrder = async (
     return;
   }
 
-  // Merge strategy
-  if (condition === 'merge') {
-    console.log('Merging Strategy...');
+  // // Merge strategy
+  // if (condition === 'merge') {
+  //   console.log('Merging Strategy...');
 
-    if (!my_position) {
-      console.log('my_position is undefined');
-      markDone(trade);
-      return;
-    }
+  //   if (!my_position) {
+  //     console.log('my_position is undefined');
+  //     markDone(trade);
+  //     return;
+  //   }
 
-    let remaining = my_position.size;
-    let retry = 0;
+  //   let remaining = my_position.size;
+  //   let retry = 0;
 
-    while (remaining > 0 && retry < RETRY_LIMIT) {
-      try {
-        const orderBook = await clobClient.getOrderBook(trade.asset);
+  //   while (remaining > 0 && retry < RETRY_LIMIT) {
+  //     try {
+  //       const orderBook = await clobClient.getOrderBook(trade.asset);
 
-        if (!orderBook.bids || orderBook.bids.length === 0) {
-          console.log('No bids found');
-          markDone(trade);
-          break;
-        }
+  //       if (!orderBook.bids || orderBook.bids.length === 0) {
+  //         console.log('No bids found');
+  //         markDone(trade);
+  //         break;
+  //       }
 
-        const maxPriceBid = orderBook.bids.reduce((max, bid) =>
-          parseFloat(bid.price) > parseFloat(max.price) ? bid : max
-        , orderBook.bids[0]);
+  //       const maxPriceBid = orderBook.bids.reduce((max, bid) =>
+  //         parseFloat(bid.price) > parseFloat(max.price) ? bid : max
+  //       , orderBook.bids[0]);
 
-        console.log('Max price bid:', maxPriceBid);
+  //       console.log('Max price bid:', maxPriceBid);
 
-        const maxSize = parseFloat(maxPriceBid.size);
-        const price = parseFloat(maxPriceBid.price);
+  //       const maxSize = parseFloat(maxPriceBid.size);
+  //       const price = parseFloat(maxPriceBid.price);
 
-        const amount = remaining <= maxSize ? remaining : maxSize;
+  //       const amount = remaining <= maxSize ? remaining : maxSize;
 
-        const order_args = {
-          side: Side.SELL,
-          tokenID: my_position.asset,
-          amount,
-          price,
-          feeRateBps: TAKER_FEE_BPS,
-        };
+  //       const order_args = {
+  //         side: Side.SELL,
+  //         tokenID: my_position.asset,
+  //         amount,
+  //         price,
+  //         feeRateBps: TAKER_FEE_BPS,
+  //       };
 
-        console.log("============== MERGE TRADE ===============")
-        console.log('Order args:', order_args);
-        console.log("==========================================")
+  //       console.log("============== MERGE TRADE ===============")
+  //       console.log('Order args:', order_args);
+  //       console.log("==========================================")
 
-        const signedOrder = await clobClient.createMarketOrder(order_args);
-        const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
+  //       const signedOrder = await clobClient.createMarketOrder(order_args);
+  //       const resp = await clobClient.postOrder(signedOrder, OrderType.GTC);
 
-        if (resp.success === true) {
-          retry = 0;
-          console.log('Successfully posted order:', resp);
-          remaining -= amount;
-        } else {
-          retry += 1;
-          markTried(trade);
-          console.log('Error posting order: retrying...', resp);
-        }
-      } catch (e) {
-        retry += 1;
-        markTried(trade);
-        console.log('Error posting order: retrying...', e);
-      }
-    }
+  //       if (resp.success === true) {
+  //         retry = 0;
+  //         console.log('Successfully posted order:', resp);
+  //         remaining -= amount;
+  //       } else {
+  //         retry += 1;
+  //         markTried(trade);
+  //         console.log('Error posting order: retrying...', resp);
+  //       }
+  //     } catch (e) {
+  //       retry += 1;
+  //       markTried(trade);
+  //       console.log('Error posting order: retrying...', e);
+  //     }
+  //   }
 
-    if (retry >= RETRY_LIMIT) markDone(trade);
-    return;
-  }
+  //   if (retry >= RETRY_LIMIT) markDone(trade);
+  //   return;
+  // }
 
 
 
