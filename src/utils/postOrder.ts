@@ -6,6 +6,10 @@ const RETRY_LIMIT = ENV.RETRY_LIMIT;
 
 const TAKER_FEE_BPS = 1000;
 
+const MIN_BUY_NOTIONAL = 1; // $1
+
+const RATIO_AMP = 50;
+
 // In-memory retry tracking (no DB)
 const retries = new Map<string, number>();
 
@@ -33,7 +37,7 @@ const postOrder = async (
   my_balance: number,
   user_balance: number
 ) => {
-    const ratioAmp = 30;
+    
   const key = tradeKey(trade);
   const alreadyTried = retries.get(key) ?? 0;
   if (alreadyTried >= RETRY_LIMIT) {
@@ -114,7 +118,7 @@ const postOrder = async (
   if (condition === 'buy') {
     console.log('Buy Strategy...');
 
-    const ratio = my_balance * ratioAmp / (user_balance + trade.usdcSize);
+    const ratio = my_balance * RATIO_AMP / (user_balance + trade.usdcSize);
     console.log('ratio', ratio);
 
     let remaining = trade.usdcSize * ratio;
@@ -137,7 +141,7 @@ const postOrder = async (
 
         console.log('Min price ask:', minPriceAsk);
 
-        if (parseFloat(minPriceAsk.price) - 0.05 > trade.price) {
+        if (parseFloat(minPriceAsk.price) - 0.1 > trade.price) {
           console.log('Too big different price - do not copy');
           markDone(trade);
           break;
@@ -150,6 +154,7 @@ const postOrder = async (
         const maxSpendAtBestAsk = askSize * askPrice;
         const amount = remaining <= maxSpendAtBestAsk ? remaining : maxSpendAtBestAsk;
 
+
         const order_args = {
           side: Side.BUY,
           tokenID: trade.asset,
@@ -159,6 +164,12 @@ const postOrder = async (
         };
 
         console.log('Order args:', order_args);
+
+        if (remaining < MIN_BUY_NOTIONAL) {
+          console.log(`Skipping BUY: remaining ${remaining} < $1 minimum`);
+          markDone(trade);
+          break;
+        }
 
         const signedOrder = await clobClient.createMarketOrder(order_args);
         const resp = await clobClient.postOrder(signedOrder, OrderType.FOK);
