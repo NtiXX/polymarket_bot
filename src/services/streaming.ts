@@ -1,0 +1,141 @@
+import { RealTimeDataClient } from "@polymarket/real-time-data-client";
+import type { Message } from "@polymarket/real-time-data-client/dist/model"; // path may vary by build
+import { ClobClient } from "@polymarket/clob-client";
+
+import { ENV } from "../config/env";
+import fetchData from "../utils/fetchData";
+import postOrder from "../utils/postOrder";
+import { TradeAggregator } from "../utils/tradeAggregator";
+import getMyBalance from "../utils/getMyBalance";
+
+const USER_ADDRESS = ENV.USER_ADDRESS!.toLowerCase(); // target trader (proxy wallet address)
+const PROXY_WALLET = ENV.PROXY_WALLET!.toLowerCase(); // your proxy wallet
+const RETRY_LIMIT = ENV.RETRY_LIMIT;
+
+const BATCH_WINDOW_MS = 250; // smaller window = faster reaction
+
+let BOT_START_TS = 0;
+
+type ActivityTradePayload = {
+  asset: string;
+  conditionId: string;
+  slug: string;          // market slug
+  eventSlug: string;
+  title: string;
+  outcome: string;
+  side: "BUY" | "SELL";
+  price: number;
+  size: number;
+  timestamp: number;
+  transactionHash?: string;
+  proxyWallet?: string;  // IMPORTANT
+};
+
+const seen = new Set<string>();
+
+function keyOf(p: ActivityTradePayload) {
+  return p.transactionHash ?? `${p.timestamp}-${p.asset}-${p.side}-${p.size}-${p.price}`;
+}
+
+async function seedMarketSlugsFromHttp(): Promise<string[]> {
+  const recent = await fetchData(
+    `https://data-api.polymarket.com/activity?user=${USER_ADDRESS}&limit=100&offset=0`
+  );
+
+  const slugs = new Set<string>();
+  for (const a of recent) {
+    if (a?.type === "TRADE" && typeof a?.marketSlug === "string") slugs.add(a.marketSlug);
+  }
+
+  // If empty, you can fall back to no filters (NOT recommended; huge volume).
+  return [...slugs].slice(0, 20);
+}
+
+export default async function runCopyBotWs(clobClient: ClobClient) {
+  const marketSlugs = await seedMarketSlugsFromHttp();
+  if (marketSlugs.length === 0) {
+    throw new Error("No market slugs found from HTTP seed; cannot safely subscribe without filters.");
+  }
+
+  console.log("RTDS subscribing to market slugs:", marketSlugs);
+
+  const agg = new TradeAggregator();
+
+  const flushLoop = async () => {
+    while (true) {
+      await new Promise((r) => setTimeout(r, BATCH_WINDOW_MS));
+
+      const aggregated = agg.flush();
+      if (aggregated.length === 0) continue;
+
+      // minimal state: you said you don’t need positions; keep balance only
+      const my_balance = await getMyBalance(PROXY_WALLET);
+      const user_balance = await getMyBalance(USER_ADDRESS);
+
+      for (const trade of aggregated) {
+        const k = trade.transactionHash ?? `${trade.firstTimestamp}-${trade.lastTimestamp}-${trade.side}-${trade.asset}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+
+        // postOrder currently expects positions; pass undefined
+        if (trade.side === "BUY") {
+          await postOrder(clobClient, "buy", undefined, undefined, trade, my_balance, user_balance);
+        } else if (trade.side === "SELL") {
+          await postOrder(clobClient, "sell", undefined, undefined, trade, my_balance, user_balance);
+        }
+      }
+    }
+  };
+
+  const onMessage = (_client: RealTimeDataClient, message: Message): void => {
+    if (message.topic !== "activity" || message.type !== "trades") return;
+
+    const p = message.payload as ActivityTradePayload;
+
+    // ignore backlog / past events
+    if (!p.timestamp || p.timestamp < BOT_START_TS) return;
+
+    // only the target wallet
+    if ((p.proxyWallet ?? "").toLowerCase() !== USER_ADDRESS) return;
+
+    const k = keyOf(p);
+    if (seen.has(k)) return;
+    seen.add(k);
+
+    agg.add({
+        type: "TRADE",
+        asset: p.asset,
+        conditionId: p.conditionId,
+        marketSlug: (p as any).marketSlug ?? (p as any).slug, // tolerate both
+        title: p.title,
+        outcome: p.outcome,
+        side: p.side,
+        price: Number(p.price),
+        size: Number(p.size),
+        usdcSize: Number(p.size) * Number(p.price),
+        timestamp: Number(p.timestamp),
+        transactionHash: p.transactionHash,
+    } as any);
+    };
+
+  const onConnect = (client: RealTimeDataClient): void => {
+    BOT_START_TS = Math.floor(Date.now() / 1000);
+    // Subscribe to activity trades for each market slug (filters supported by client)
+    for (const slug of marketSlugs) {
+      client.subscribe({
+        subscriptions: [
+          {
+            topic: "activity",
+            type: "trades",
+            filters: JSON.stringify({ market_slug: slug }),
+          },
+        ],
+      });
+    }
+  };
+
+  const client = new RealTimeDataClient({ onMessage, onConnect });
+  client.connect();
+
+  await flushLoop();
+}

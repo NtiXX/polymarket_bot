@@ -11,6 +11,8 @@ const MIN_BUY_NOTIONAL = 1; // $1
 
 const RATIO_AMP = 30;
 
+
+
 // In-memory retry tracking (no DB)
 const retries = new Map<string, number>();
 
@@ -62,6 +64,25 @@ const feeBpsFromTitle = (title?: string): number => {
   return diff === 15 ? FEE_15M_BPS : FEE_DEFAULT_BPS;
 };
 
+const getStartingBalances = () => ({
+  my: Number((ENV as any).MY_STARTING_BALANCE ?? 0),
+  user: Number((ENV as any).USER_STARTING_BALANCE ?? 0),
+});
+
+const getCopyRatio = (my_balance: number, user_balance: number, tradeNotional: number) => {
+  
+  const { my, user } = getStartingBalances();
+
+  console.log(`My starting balance: ${my}--------User starting balance: ${user}`)
+
+  if (Number.isFinite(my) && my > 0 && Number.isFinite(user) && user > 0) {
+    return my / user; // NO amp here
+  }
+
+  // fallback (original approach)
+  return (my_balance) / (user_balance + tradeNotional);
+};
+
 const postOrder = async (
   clobClient: ClobClient,
   condition: 'merge' | 'buy' | 'sell',
@@ -83,8 +104,7 @@ const postOrder = async (
   if (condition === 'buy') {
     console.log('Buy Strategy...');
 
-    const ratio = my_balance * RATIO_AMP / (user_balance + trade.usdcSize);
-    console.log('ratio', ratio);
+    const ratio = getCopyRatio(my_balance, user_balance, trade.usdcSize) * RATIO_AMP;
 
     let remaining = trade.usdcSize * ratio;
     remaining = Math.min(remaining, my_balance);
@@ -106,7 +126,7 @@ const postOrder = async (
 
         console.log('Min price ask:', minPriceAsk);
 
-        if (parseFloat(minPriceAsk.price) - 0.06 > trade.price) {
+        if (parseFloat(minPriceAsk.price) - 0.03 > trade.price) {
           console.log('Too big different price - do not copy');
           markDone(trade);
           break;

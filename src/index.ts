@@ -11,11 +11,17 @@ const PROXY_WALLET = ENV.PROXY_WALLET;
 export const main = async () => {
     // await connectDB();
     console.log(`Target User Wallet addresss is: ${USER_ADDRESS}`);
-    console.log(`Target User Wallet balance is: ${await getMyBalance(USER_ADDRESS)}` )
+    const userBalance = await getMyBalance(USER_ADDRESS)
+    console.log(`Target User Wallet balance is: ${userBalance}` )
     console.log(`My Wallet addresss is: ${PROXY_WALLET}`);
-    console.log(`My Wallet balance is: ${await getMyBalance(PROXY_WALLET)}` )
+    const myBalance = await getMyBalance(PROXY_WALLET)
+    console.log(`My Wallet balance is: ${myBalance}` )
+
+    ENV.MY_STARTING_BALANCE = myBalance;
+    ENV.USER_STARTING_BALANCE = userBalance;
+
     const clobClient = await createClobClient();
-    runCopyBot(clobClient);
+    runCopyBot(clobClient, myBalance, userBalance);
 };
 
 main();

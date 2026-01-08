@@ -15,8 +15,6 @@ const FETCH_INTERVAL = ENV.FETCH_INTERVAL; // seconds
 const TOO_OLD_TIMESTAMP = ENV.TOO_OLD_TIMESTAMP; // hours
 const RETRY_LIMIT = ENV.RETRY_LIMIT;
 
-const BATCH_WINDOW_MS = 900; // collect “5-6 events per trade” into 1 order
-
 if (!USER_ADDRESS) throw new Error("USER_ADDRESS is not defined");
 if (!PROXY_WALLET) throw new Error("PROXY_WALLET is not defined");
 
@@ -87,6 +85,8 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
       console.log("My current balance:", my_balance);
       console.log("User current balance:", user_balance);
 
+      console.log("ENV start balances now:", (ENV as any).MY_STARTING_BALANCE, (ENV as any).USER_STARTING_BALANCE);
+
       if (trade.side === "BUY") {
         await postOrder(clobClient, "buy", my_position, user_position, trade, my_balance, user_balance);
       } else if (trade.side === "SELL") {
@@ -103,7 +103,7 @@ const doTrading = async (clobClient: ClobClient, trades: AggregatedTrade[]) => {
   }
 };
 
-const runCopyBot = async (clobClient: ClobClient) => {
+const runCopyBot = async (clobClient: ClobClient, myStartingBalance: number, userStartingBalance: number) => {
   console.log("Copy bot running. Poll interval:", FETCH_INTERVAL, "seconds");
 
   while (true) {
@@ -141,20 +141,15 @@ const runCopyBot = async (clobClient: ClobClient) => {
       const agg = new TradeAggregator();
       for (const t of newTrades) agg.add(t);
 
-      const t0 = Date.now();
-      while (Date.now() - t0 < BATCH_WINDOW_MS) {
-        await sleep(150);
+      const more = await fetchTargetTrades();
+      const moreNew = more.filter((t) => {
+        const k = activityKey(t);
+        if (seenThisRun.has(k)) return false;
+        seenThisRun.add(k);
+        return true;
+      });
 
-        const more = await fetchTargetTrades();
-        const moreNew = more.filter((t) => {
-          const k = activityKey(t);
-          if (seenThisRun.has(k)) return false;
-          seenThisRun.add(k);
-          return true;
-        });
-
-        for (const t of moreNew) agg.add(t);
-      }
+      for (const t of moreNew) agg.add(t);
 
       const aggregated = agg.flush();
       console.log(`✅ Aggregated into ${aggregated.length} trade(s). Executing...`);
